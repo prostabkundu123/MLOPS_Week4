@@ -1,0 +1,13 @@
+# Core ML libraries
+pandas==2.2.3
+numpy==2.1.2
+scikit-learn==1.5.2
+joblib==1.4.2
+
+# Data versioning and GCS integration
+dvc==3.50.2
+dvc-gs==3.0.1
+gcsfs==2024.9.0
+
+# Testing
+pytest==8.3.3

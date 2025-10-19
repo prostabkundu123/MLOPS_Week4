@@ -1,0 +1,69 @@
+name: CI - Main Branch
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  main-ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Configure DVC Remote
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_KEY_JSON }}
+        run: |
+          echo "${GOOGLE_APPLICATION_CREDENTIALS}" > gcp-key.json
+          dvc remote modify myremote credentialpath gcp-key.json
+
+      - name: Pull data and model from DVC
+        run: dvc pull -r myremote
+
+      - name: Run unit tests and generate Markdown report
+        run: |
+          pytest --maxfail=1 --disable-warnings --tb=short -q --junitxml=report.xml > pytest_output.txt
+
+          echo "## Pytest Summary Report" > dev_report.md
+          echo "" >> dev_report.md
+          echo "**Date:** $(date)" >> dev_report.md
+          echo "" >> dev_report.md
+          echo "### Test Results:" >> dev_report.md
+          echo '```' >> dev_report.md
+          cat pytest_output.txt >> dev_report.md
+          echo '```' >> dev_report.md
+          echo "" >> dev_report.md
+          pytest --maxfail=1 --disable-warnings --tb=short -q --cov=. --cov-report=term-missing >> pytest_output.txt 2>&1 || true
+        
+      - name: Setup CML
+        uses: iterative/setup-cml@v2
+
+      - name: Comment Test summary with CML on commit (push events)
+        if: github.event_name == 'push'
+        env:
+          REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: cml comment create --target=commit --publish dev_report.md
+
+      - name: Comment Test summary with CML on PR (pull request events)
+        if: github.event_name == 'pull_request'
+        env:
+          REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: cml comment create --target=pr --publish dev_report.md
